@@ -29,9 +29,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Map.Entry;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -297,6 +299,9 @@ public class TransMeta extends AbstractMeta
   boolean isKeyPrivate;
   private ArrayList<MissingTrans> missingTrans;
 
+  /** The metadata map for custom transformation metadata **/
+  protected Map<String, Map<String, String>> extraMetadataMap;
+
   /**
    * The TransformationType enum describes the various types of transformations in terms of execution, including Normal,
    * Serial Single-Threaded, and Single-Threaded.
@@ -422,6 +427,9 @@ public class TransMeta extends AbstractMeta
 
   /** A constant specifying the tag value for the XML node of the steps' error-handling information. */
   public static final String XML_TAG_STEP_ERROR_HANDLING = "step_error_handling";
+
+  /** A constant specifying the tag value for the XML node of the custom metadata. */
+  public static final String XML_TAG_EXTRA_META = "extra_meta";
 
   /**
    * Builds a new empty transformation. The transformation will have default logging capability and no variables, and
@@ -2575,6 +2583,35 @@ public class TransMeta extends AbstractMeta
     //
     retval.append( AttributesUtil.getAttributesXml( attributesMap ) );
 
+    // Store the extra metadata map info
+    if ( extraMetadataMap != null ) {
+      retval.append( "  " ).append( XMLHandler.openTag( XML_TAG_EXTRA_META ) ).append( Const.CR );
+
+      Iterator metadataEntries = extraMetadataMap.entrySet().iterator();
+
+      while (metadataEntries.hasNext() ) {
+        Entry currEntry = (Entry) metadataEntries.next();
+
+        retval.append( "    " ).append( XMLHandler.openTag( currEntry.getKey().toString() ) ).append( Const.CR );
+
+        Map<String, String> entriesMap = (Map<String, String>) currEntry.getValue();
+        Iterator entries = entriesMap.entrySet().iterator();
+
+        while ( entries.hasNext() ) {
+          Entry entry = (Entry) entries.next();
+          String entryKey = entry.getKey().toString();
+
+          retval.append( "      " ).append( XMLHandler.openTag ( entryKey ) );
+          retval.append( entry.getValue() );
+          retval.append( XMLHandler.closeTag( entryKey ) ).append( Const.CR );
+        }
+
+        retval.append( "    " ).append( XMLHandler.closeTag(currEntry.getKey().toString()) ).append( Const.CR );
+      }
+
+      retval.append( XMLHandler.closeTag( XML_TAG_EXTRA_META ) ).append( Const.CR );
+    }
+
     retval.append( XMLHandler.closeTag( XML_TAG ) ).append( Const.CR );
 
     return XMLFormatter.format( retval.toString() );
@@ -3381,6 +3418,36 @@ public class TransMeta extends AbstractMeta
         keyForSessionKey = XMLHandler.stringToBinary( XMLHandler.getTagValue( infonode, "key_for_session_key" ) );
         isKeyPrivate = "Y".equals( XMLHandler.getTagValue( infonode, "is_key_private" ) );
 
+
+        // Read the DET persisted state info
+        Node extraMetaNode = XMLHandler.getSubNode( transnode, XML_TAG_EXTRA_META );
+        NodeList extraMetaChildren = extraMetaNode.getChildNodes();
+
+        extraMetadataMap = new HashMap<>();
+
+        for ( int i = 0; i < extraMetaChildren.getLength(); i++ ) {
+          Node currNode = extraMetaChildren.item(i);
+
+          if ( currNode.getNodeType() == Node.ELEMENT_NODE ) {
+            Map<String, String> subNodesMap = new HashMap<>();
+            String key = currNode.getNodeName();
+
+            NodeList currNodeChildren = currNode.getChildNodes();
+
+            for ( int j = 0; j < currNodeChildren.getLength(); j++ ) {
+              Node node = currNodeChildren.item(j);
+
+              if ( node.getNodeType() == Node.ELEMENT_NODE ) {
+                String nodeKey = node.getNodeName();
+                String nodeValue = node.getTextContent();
+
+                subNodesMap.put( nodeKey, nodeValue );
+              }
+            }
+
+            extraMetadataMap.put( key, subNodesMap );
+          }
+        }
       } catch ( KettleXMLException xe ) {
         throw new KettleXMLException( BaseMessages.getString( PKG, "TransMeta.Exception.ErrorReadingTransformation" ),
             xe );
@@ -6354,5 +6421,24 @@ public class TransMeta extends AbstractMeta
   @Override
   public boolean hasMissingPlugins() {
     return missingTrans != null && !missingTrans.isEmpty();
+  }
+
+  /**
+   * Gets the extra metadata map object.
+   *
+   * @return the extraMetadataMap
+   */
+  public Map<String, Map<String, String>> getExtraMetadataMap() {
+
+    return extraMetadataMap;
+  }
+
+  /**
+   * Sets the extra metadata map object.
+   *
+   * @param extraMetadataMap the metadata map to set
+   */
+  public void setExtraMetadataMap( Map<String, Map<String, String>> extraMetadataMap ) {
+    this.extraMetadataMap = extraMetadataMap;
   }
 }
